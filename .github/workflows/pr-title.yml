@@ -1,0 +1,27 @@
+# Checks that the PR title follows Conventional Commits (it becomes the squash merge commit).
+name: PR title
+
+on:
+  workflow_call:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+          if printf '%s' "$TITLE" | grep -Eq "^($types)(\([a-z0-9._/-]+\))?!?: .{3,}"; then
+            echo "OK: $TITLE"
+          else
+            echo "::error::Not a Conventional Commits title: $TITLE"
+            echo "E.g.: feat(agenda): permite remarcar horário (#12)"
+            exit 1
+          fi
