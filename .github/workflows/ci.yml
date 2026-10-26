@@ -1,0 +1,76 @@
+# Afold reusable CI
+# Usage in a project:
+#   jobs:
+#     ci:
+#       uses: afoldbr/.github/.github/workflows/ci.yml@v1
+#
+# Runs the project's `scripts/ci.sh` (portable logic, identical on any platform).
+# Without that script, falls back to the lint/check/typecheck/test/build scripts in package.json.
+# Node version: .nvmrc or .node-version when present, otherwise the node-version input.
+name: Reusable CI
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node version when the project has no .nvmrc or .node-version
+        type: string
+        default: '22'
+      working-directory:
+        description: Project folder
+        type: string
+        default: '.'
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Detect Node setup
+        id: node
+        if: hashFiles(format('{0}/package.json', inputs.working-directory)) != ''
+        run: |
+          if [ -f .nvmrc ]; then echo "file=.nvmrc" >> "$GITHUB_OUTPUT"
+          elif [ -f .node-version ]; then echo "file=.node-version" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f package-lock.json ]; then echo "cache=npm" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Node
+        if: steps.node.outcome == 'success'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ steps.node.outputs.file == '' && inputs.node-version || '' }}
+          node-version-file: ${{ steps.node.outputs.file != '' && format('{0}/{1}', inputs.working-directory, steps.node.outputs.file) || '' }}
+          cache: ${{ steps.node.outputs.cache }}
+          cache-dependency-path: ${{ format('{0}/package-lock.json', inputs.working-directory) }}
+
+      # pnpm and yarn are not preinstalled on the runner; corepack provides them
+      # in the version pinned by the "packageManager" field of package.json.
+      - name: Enable pnpm and yarn (corepack)
+        if: steps.node.outcome == 'success'
+        run: |
+          command -v corepack >/dev/null || npm install -g corepack  # Node 25+ no longer bundles it
+          corepack enable
+
+      - name: scripts/ci.sh
+        if: hashFiles(format('{0}/scripts/ci.sh', inputs.working-directory)) != ''
+        run: bash scripts/ci.sh
+
+      - name: Node fallback
+        if: hashFiles(format('{0}/scripts/ci.sh', inputs.working-directory)) == '' && hashFiles(format('{0}/package.json', inputs.working-directory)) != ''
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          for s in lint check typecheck test build; do
+            if node -e "process.exit(require('./package.json').scripts?.['$s'] ? 0 : 1)"; then
+              echo "==> npm run $s"; npm run "$s"
+            fi
+          done

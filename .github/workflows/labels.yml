@@ -1,0 +1,38 @@
+# Creates or updates Afold's standard labels in the calling repository.
+# Label names stay in Portuguese and descriptions stay bilingual: the team and clients see them on issues.
+name: Afold labels
+
+on:
+  workflow_call:
+
+permissions:
+  issues: write
+
+jobs:
+  labels:
+    name: Labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          create() { gh label create "$1" --color "$2" --description "$3" --force; }
+          # Flow status
+          create "status: agent-ready"   "0E8A16" "Critério de aceite completo: pode ir para um agente de IA · Ready for an AI agent"
+          create "status: em-andamento"  "FBCA04" "Alguém (pessoa ou agente) está trabalhando · In progress"
+          create "status: aguardando"    "D4C5F9" "Esperando cliente ou decisão · Waiting on client or decision"
+          create "status: bloqueado"     "B60205" "Impedido por outra issue ou fator externo · Blocked"
+          # Priority
+          create "P1" "B60205" "Urgente ou bloqueia a entrega · Urgent"
+          create "P2" "FBCA04" "Importante, próxima iteração · Important"
+          create "P3" "C2E0C6" "Pode esperar · Can wait"
+          # Context
+          create "produção"     "5319E7" "Afeta o ambiente em produção · Affects production"
+          create "spec"         "1D76DB" "Muda a spec ou precisa de validação do cliente · Spec change"
+          create "adr"          "0052CC" "Precisa de decisão de arquitetura · Needs an ADR"
+          create "dependências" "EDEDED" "Atualização de dependências · Dependency update"
+          # Opt-in AI review (uses the Claude subscription)
+          create "revisar-ia"   "BFD4F2" "Pede a revisão por IA neste PR · Requests the AI review"
